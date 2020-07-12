@@ -1,0 +1,300 @@
+---
+title:  " Defence Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    navbar:
+    - href: https://rmarkdown.rstudio.com/flexdashboard/using.html
+      title: References
+    vertical_layout: fill
+    pdf_document: default
+    runtime: shiny
+    source_code: embed
+    theme: flatly
+    css: styles.css
+    
+    
+---
+
+
+
+
+
+
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(tidyr)
+library(forcats)
+library(highcharter)
+
+Defence_Data_World <- read.csv("D://Submissions//Statistics//GlobalDefencePower.csv")
+Defence_Data_World
+#Defence_Data_World$Country_Ab <- strtrim(Defence_Data_World$ISO3,2)
+#Defence_Data_World
+
+```
+
+Global Defence Overview
+=========================================================================
+
+
+Column {data-height=350}
+-----------------------------------------------------------------------
+
+### Country-wise Defence Rank
+
+```{r}
+map_world <- get_data_from_map(download_map_data("https://code.highcharts.com/mapdata/custom/world-eckert3-highres.js"))
+
+
+countries <- map_world%>%select(`iso-a3`)
+
+```
+```{r}
+
+Country_Rank <- Defence_Data_World%>%select(ISO3,Rank)%>%group_by(ISO3)%>%arrange(Rank)
+
+
+hcmap("https://code.highcharts.com/mapdata/custom/world-eckert3-highres.js", data =Country_Rank, value = "Rank",
+      joinBy = c("iso-a3","ISO3"),
+      name = "Country wise defence rank",
+      dataLabels= list(enabled = TRUE, format= '{point.name}'),
+      
+      borderColor = "transparent", borderWidth  = 0.1,
+      tooltip = list(valueDecimals = 0))%>%
+hc_colorAxis(dataClasses = color_classes(c(seq(1, 130, by = 20), 133))) %>% 
+  hc_legend(layout = "vertical", align = "right") %>%
+  hc_mapNavigation(enabled = TRUE)
+```
+
+### Country wise defence information
+
+
+```{r}
+library(shiny)
+
+selectInput(inputId = "Country_Select",
+            label = "Choose Country to display defence information ",
+            choices = (Defence_Data_World$Country),
+            multiple = TRUE)
+
+
+renderPrint(expr = {input$Country_Select})
+
+
+
+```
+
+Column {data-height=350}
+-----------------------------------------------------------------------
+
+
+### Result/s
+
+```{r}
+result <- reactive({
+    Defence_Data_World %>%
+        filter(Country %in% input$Country_Select)
+})
+```
+
+
+
+```{r}
+renderTable(expr = {
+    result()
+})
+```
+
+
+  
+
+Military
+=====================================================================
+
+Column {data-width=150,data-height=250}
+--------------------------------------------------------------------
+
+### Globally average number of military personnel at service
+```{r}
+avg_milper <- round(mean(Defence_Data_World$Total.Military.Personnel),0)
+
+valueBox(avg_milper,
+        icon = "fad fa-shield",
+        color = "primary"
+        )
+
+
+
+```
+
+### Total population(in Million) which is fit for military service in 14 European Countries
+
+```{r}
+European_Nations <- c("Germany","France","Italy","Poland","Turkey","Spain","Greece","Sweden","Austria","Romania","Finland","Portugal","Croatia","Belgium")
+
+Total_FitService <- Defence_Data_World%>%filter(Country %in% European_Nations)%>%summarise(Total_pop = sum(Fit.for.Service)/1000000)%>%pull(Total_pop)
+```
+
+```{r}
+#shiny valuebox 
+
+renderValueBox({
+  
+  valueBox(Total_FitService, 
+           icon = "far fa-helmet-battle",
+           color = "primary")
+})
+```
+
+Column {.tabset }
+--------------------------------------------------------
+
+###  Graph
+
+Extracting top five countries in the world as per defence rank. Using this data examining the relationship between the Total population and population eligible for serving military.
+
+```{r, fig.width=50,fig.height=50}
+Top_5 <- Defence_Data_World%>%filter(Rank %in% c(1:5))%>%group_by(Country)
+
+scatter_p <- plot_ly(Top_5,x=~(Reaching.Military.Age/Total.Population)*100,y=~Total.Population,color=~Country)
+scatter_p
+
+#ggplotly(scatter_plot)
+
+
+
+
+```
+
+### Inference from graph
+We can observe that on x axis we have percentage of population eligible by age to serve the military and y-axis has total population of the country. So,India has the highest approx. 1.9% of total population can join army whereas Russia has the lowest of less than 1%.
+
+
+
+```{r}
+
+```
+Naval
+==============================================================
+
+Row{.tabset}
+--------------------------------------------------------------------
+
+### Relationship between Total number of naval assets and merchant marine strength for all countries
+
+```{r}
+library(rbokeh)
+
+point_bokeh <- figure(width = 500, height = 400) %>%
+  ly_points(Defence_Data_World$Total.Naval.Assets,Defence_Data_World$Merchant.Marine.Strength, data = Defence_Data_World,color="indigo",hover=c(Total.Naval.Assets,Merchant.Marine.Strength))
+  
+point_bokeh
+
+```
+
+
+### Number of naval ports in the US continent
+```{r}
+countries_US <- c("United States","Canada","Mexico","Cuba","Argentina","Peru","Venezuela","Brazil","Columbia")
+
+map_world <- get_data_from_map(download_map_data("https://code.highcharts.com/mapdata/custom/world-eckert3-highres.js"))
+
+US_Ports <- Defence_Data_World%>%filter(Country %in% countries_US)%>%select(Country,ISO3,Major.Ports...Terminals)%>%group_by(Country)
+
+hcmap("https://code.highcharts.com/mapdata/custom/world-eckert3-highres.js", data =US_Ports, value = "Major.Ports...Terminals",
+      joinBy = c("iso-a3","ISO3"),
+      name = "World map showing number of major ports for all countries in the US continent",
+      dataLabels= list(enabled = TRUE, format= '{point.name}'),
+      
+      borderColor = "transparent", borderWidth  = 0.1,
+      tooltip = list(valueDecimals = 0))%>%
+hc_colorAxis(dataClasses = color_classes(c(seq(1, 20, by = 5), 25))) %>% 
+  hc_legend(layout = "vertical", align = "right") %>%
+  hc_mapNavigation(enabled = TRUE)
+```
+
+Air force
+=======================================================================
+
+
+### Number of average fighter aircrafts
+```{r}
+
+Defence_Data_World%>%group_by(Country)%>%summarise(avg_fighter=round(mean(Fighter.Aircraft,na.rm = TRUE),0))%>%
+  hchart(type="treemap",hcaes(x=Country,value = avg_fighter,color= avg_fighter))
+
+
+
+
+```
+
+### Number of average trainer aircrafts
+```{r}
+Defence_Data_World%>%group_by(Country)%>%summarise(avg_trainer=round(mean(Trainer.Aircraft,na.rm = TRUE),0))%>%
+  hchart(type="treemap",hcaes(x=Country,value = avg_trainer,color= avg_trainer))
+
+```
+
+Storyboard{.storyboard}
+==============================================================
+
+### This graph shows: Production of defence armaments in top 5 countries ie. United States of America, Russia, China, India and France. 
+```{r}
+# extracting top 5 countries as per defence rank
+
+top_five <- Defence_Data_World%>%filter(Rank %in% c(1:5))%>%group_by(Country)
+
+col_plot <- top_five%>%ggplot(aes(x=Country,y=(Production..bbl.dy./1000000)))+geom_col(aes(fill=Country))+
+  theme(plot.title = element_text(face = "bold",colour = "blue"))+
+  labs(x="Production of defence armaments",y="Count(Million)")
+
+
+
+ggplotly(col_plot)
+```
+
+### This graph shows: Consumption of defence armaments in top 5 countries ie. United States of America, Russia, China, India and France.
+
+```{r}
+# extracting top 5 countries as per defence rank
+
+top_five <- Defence_Data_World%>%filter(Rank %in% c(1:5))%>%group_by(Country)
+
+consum_plot <- top_five%>%ggplot(aes(x=Country,y=(Consumption..bbl.dy./1000000)))+geom_col(aes(fill=Country))+
+  theme(plot.title = element_text(face = "bold",colour = "blue"))+
+  labs(x="Consumption of defence armaments",y="Count(Million)")
+
+ggplotly(consum_plot)
+```
+
+### Financial aspects of Global Defence 
+
+
+
+
+The average foreign exchange 
+
+```{r}
+renderGauge({
+  rate <- round(mean(Defence_Data_World$Foreign.Exchange...Gold, na.rm = TRUE),0)
+  gauge(rate, min = min(Defence_Data_World$Foreign.Exchange...Gold), max = max(Defence_Data_World$Foreign.Exchange...Gold), symbol = 'Million', gaugeSectors(
+    success = c(1000000, 50000000), warning = c(10000, 90000), danger = c(10, 80000)
+  ))
+})
+```
+
+### Purpose of Dashboard
+
+Dataset:
+
+This dataset contains global defence information for 133 countries. Data mainly comprises of military, naval and air force data such as military personnel at service, types of air crafts, naval ports and armaments and also the financial defence data such as foreign exchange and defence budget.All the countries are ranked as per their defence infrastructure.
+
+Purpose:
+
+Through this dashboard we can examine the defence system of various countries in terms of military,navy and air force.
+
